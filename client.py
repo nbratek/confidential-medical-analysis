@@ -66,7 +66,7 @@ files = {
 }
 
 data = {
-    "length": str(len(values))   # <- KLUCZOWA ZMIANA
+    "length": str(len(values))
 }
 
 try:
