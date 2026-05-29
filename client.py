@@ -7,9 +7,8 @@ from data_parser import (
     get_blood_pressure
 )
 
-# =========================
-# 1. WYBÓR METRYKI
-# =========================
+
+# 1. wybór metryki
 
 METRIC = "glucose"   # glucose | bmi | bp
 
@@ -32,9 +31,8 @@ if len(values) == 0:
 print(f"Liczba próbek ({METRIC}): {len(values)}")
 
 
-# =========================
-# 2. KONTEKST HE
-# =========================
+
+# 2. kontekst HE
 
 context = ts.context(
     ts.SCHEME_TYPE.CKKS,
@@ -46,19 +44,16 @@ context.global_scale = 2**40
 context.generate_galois_keys()
 
 
-# =========================
-# 3. SZYFROWANIE
-# =========================
 
+# 3. szyfrowanie
 enc_vector = ts.ckks_vector(context, values)
 
 enc_bytes = enc_vector.serialize()
 context_bytes = context.serialize(save_secret_key=False)
 
 
-# =========================
-# 4. WYSYŁKA DO SERWERA
-# =========================
+
+# 4. wysyłka do serwera
 
 files = {
     "vector": ("vector.bin", enc_bytes),
@@ -80,9 +75,8 @@ except requests.exceptions.ConnectionError:
     raise RuntimeError("Nie można połączyć z serwerem. Czy Flask działa?")
 
 
-# =========================
-# 5. WALIDACJA ODPOWIEDZI
-# =========================
+
+# 5. walidacja odpowiedzi
 
 if response.status_code != 200:
     print("Błąd serwera:", response.status_code)
@@ -90,9 +84,7 @@ if response.status_code != 200:
     raise RuntimeError("Serwer zwrócił błąd")
 
 
-# =========================
-# 6. ODBIÓR WYNIKU (CKKS)
-# =========================
+# 6. odbiór wyniku (CKKS)
 
 try:
     result_enc = ts.ckks_vector_from(context, response.content)
@@ -101,9 +93,5 @@ except Exception as e:
     print("RAW RESPONSE (debug):", response.content[:200])
     raise RuntimeError(f"Błąd dekodowania CKKS: {e}")
 
-
-# =========================
-# 7. OUTPUT
-# =========================
 
 print(f"\nŚrednia ({METRIC}): {result:.4f}")

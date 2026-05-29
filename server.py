@@ -6,33 +6,23 @@ app = Flask(__name__)
 @app.route("/compute_mean", methods=["POST"])
 def compute_mean():
 
-    # =========================
-    # 1. ODBIÓR DANYCH
-    # =========================
+    # 1. odbiór danych
     vector_bytes = request.files["vector"].read()
     context_bytes = request.files["context"].read()
 
-    length = int(request.form["length"])  # <- KLUCZOWE
+    length = int(request.form["length"])
 
-    # =========================
-    # 2. ODTWORZENIE KONTEKSTU
-    # =========================
+    # 2. odtworzenie kontekstu
     context = ts.context_from(context_bytes)
 
-    # =========================
-    # 3. ODTWORZENIE WEKTORA
-    # =========================
+    # 3. odtworzenie wektora
     enc_vector = ts.ckks_vector_from(context, vector_bytes)
 
-    # =========================
-    # 4. HOMOMORFICZNE LICZENIE
-    # =========================
+    # 4. homomorficzne liczenie
     enc_sum = enc_vector.sum()
     enc_mean = enc_sum * (1 / length)
 
-    # =========================
-    # 5. ZWROT ZASZYFROWANEGO WYNIKU
-    # =========================
+    # zwrot zaszyfrowanego wyniku
     return enc_mean.serialize()
 
 
