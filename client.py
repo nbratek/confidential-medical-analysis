@@ -8,90 +8,121 @@ from data_parser import (
 )
 
 
-# 1. wybór metryki
-
-METRIC = "glucose"   # glucose | bmi | bp
-
-if METRIC == "glucose":
-    values = get_glucose()
-elif METRIC == "bmi":
-    values = get_bmi()
-elif METRIC == "bp":
-    values = get_blood_pressure()
-else:
-    raise ValueError("Unknown metric")
-
-# filtr + limit
-values = [v for v in values if v is not None]
-values = values[:100]
-
-if len(values) == 0:
-    raise ValueError("Brak danych dla wybranej metryki!")
-
-print(f"Liczba próbek ({METRIC}): {len(values)}")
+# 1. metoda pomocnicza do załadowania danych z limitem i filtrem
+def load_values(loader, limit=100):
+    values = [v for v in loader() if v is not None][:limit]
+    if not values:
+        raise ValueError("Brak danych dla wybranej metryki!")
+    return values
 
 
-
-# 2. kontekst HE
-
-context = ts.context(
-    ts.SCHEME_TYPE.CKKS,
-    poly_modulus_degree=8192,
-    coeff_mod_bit_sizes=[60, 40, 40, 60]
-)
-
-context.global_scale = 2**40
-context.generate_galois_keys()
-
-
-
-# 3. szyfrowanie
-enc_vector = ts.ckks_vector(context, values)
-
-enc_bytes = enc_vector.serialize()
-context_bytes = context.serialize(save_secret_key=False)
-
-
-
-# 4. wysyłka do serwera
-
-files = {
-    "vector": ("vector.bin", enc_bytes),
-    "context": ("context.bin", context_bytes)
-}
-
-data = {
-    "length": str(len(values))
-}
-
-try:
-    response = requests.post(
-        "http://127.0.0.1:5000/compute_mean",
-        files=files,
-        data=data,
-        timeout=30
+# 2. metoda pomocnicza do stworzenia kontekstu HE
+def make_context():
+    ctx = ts.context(
+        ts.SCHEME_TYPE.CKKS,
+        poly_modulus_degree=8192,
+        coeff_mod_bit_sizes=[60, 40, 40, 60]
     )
-except requests.exceptions.ConnectionError:
-    raise RuntimeError("Nie można połączyć z serwerem. Czy Flask działa?")
+    ctx.global_scale = 2 ** 40
+    ctx.generate_galois_keys()
+    return ctx
 
 
+# 3. metoda pomocnicza do wysyłki pojedynczej metryki do serwera
+def post_single(endpoint, enc_bytes, context_bytes, context, n):
+    # wysyłka do serwera
+    try:
+        response = requests.post(
+            "http://127.0.0.1:5000/" + endpoint,
+            files={"vector": ("vector.bin", enc_bytes), "context": ("context.bin", context_bytes)},
+            data={"length": str(n)},
+            timeout=30
+        )
+    except requests.exceptions.ConnectionError:
+        raise RuntimeError("Nie można połączyć z serwerem. Czy Flask działa?")
 
-# 5. walidacja odpowiedzi
-
-if response.status_code != 200:
-    print("Błąd serwera:", response.status_code)
-    print(response.text)
-    raise RuntimeError("Serwer zwrócił błąd")
-
-
-# 6. odbiór wyniku (CKKS)
-
-try:
-    result_enc = ts.ckks_vector_from(context, response.content)
-    result = result_enc.decrypt()[0]
-except Exception as e:
-    print("RAW RESPONSE (debug):", response.content[:200])
-    raise RuntimeError(f"Błąd dekodowania CKKS: {e}")
+    # walidacja odpowiedzi
+    if response.status_code != 200:
+        print("Błąd serwera:", response.status_code)
+        print(response.text)
+        raise RuntimeError("Serwer zwrócił błąd")
+        
+    # odbiór i zwrot wyniku (CKKS)
+    try:
+        result_enc = ts.ckks_vector_from(context, response.content)
+        return result_enc.decrypt()[0]
+    except Exception as e:
+        print("RAW RESPONSE (debug):", response.content[:200])
+        raise RuntimeError(f"Błąd dekodowania CKKS: {e}")
 
 
-print(f"\nŚrednia ({METRIC}): {result:.4f}")
+# 4. obsługa poszczególnych metryk
+def calculate_mean(enc_bytes, context_bytes, context, n):
+    result = post_single("compute_mean", enc_bytes, context_bytes, context, n)
+    print(f" == Mean = {result:.4f} \n")
+
+
+# dostępne metryki do wyboru
+AVAILABLE_METRICS = {
+    "1": ("Mean", calculate_mean)
+}
+
+
+# dostępne dane do wyboru
+AVAILABLE_DATA = {
+    "1": ("glucose", get_glucose),
+    "2": ("bmi", get_bmi),
+    "3": ("bp", get_blood_pressure)
+}
+
+
+def main():
+    # 1. wybór typu danych do analizy
+    print("Select data to analyze:")
+    for k, (name, _) in AVAILABLE_DATA.items():
+        print(f" * {k} - {name}")
+    dk = input("> ").strip().lower()
+    if dk not in AVAILABLE_DATA:
+        print(" ! Invalid choice.")
+        return
+
+    # 2. załadowanie danych
+    label, loader = AVAILABLE_DATA[dk]
+    values = load_values(loader)
+    n = len(values)
+    print(f"Loaded {n} samples for data = {label}")
+
+    # 3. utworzenie kontekstu HE i zaszyfrowanie wektora
+    context = make_context()
+    enc_vec = ts.ckks_vector(context, values)
+    context_bytes = context.serialize(save_secret_key=False)
+    enc_bytes = enc_vec.serialize()
+
+    # 4. pętla zapytań
+    while True:
+        # 5. wybór metryk do obliczenia
+        print("Select metric to compute:")
+        for k, (name, _) in AVAILABLE_METRICS.items():
+            print(f" * {k} - {name}")
+        print(" * q - Exit")
+
+        # 6. odczyt wyboru
+        choice = input("> ").strip().lower()
+
+        # 7. obsługa wyboru
+        if choice == "q":
+            break
+        selected = choice.strip()
+        if selected not in AVAILABLE_METRICS:
+            print(" ! Invalid choice.")
+            continue
+
+        # 8. wykonanie obliczeń dla wybranej metryki
+        print()
+        desc, handler = AVAILABLE_METRICS[selected]
+        print(f" Calculating {desc}...")
+        handler(enc_bytes, context_bytes, context, n)
+
+
+if __name__ == "__main__":
+    main()
