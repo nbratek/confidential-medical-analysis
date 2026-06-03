@@ -26,7 +26,6 @@ def _values_for_description(description):
     return df.loc[df["DESCRIPTION"] == description, "VALUE"].tolist()
 
 
-
 def get_glucose():
     #Wartości glukozy
     return _values_for_description("Glucose [Mass/volume] in Blood")
@@ -34,13 +33,12 @@ def get_glucose():
 
 def get_bmi():
     #"Wartości BMI
-    return _values_for_description("Body Mass Index")
+    return _values_for_description("Body mass index (BMI) [Ratio]")
 
 
 def get_blood_pressure():
     #Ciśnienie skurczowe
     return _values_for_description("Systolic Blood Pressure")
-
 
 
 def get_all_values():

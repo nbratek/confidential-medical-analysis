@@ -8,6 +8,7 @@ from data_parser import (
 )
 
 
+
 # 1. metoda pomocnicza do załadowania danych z limitem i filtrem
 def load_values(loader, limit=100):
     values = [v for v in loader() if v is not None][:limit]
@@ -62,9 +63,30 @@ def calculate_mean(enc_bytes, context_bytes, context, n):
     print(f" == Mean = {result:.4f} \n")
 
 
+def calculate_sum(enc_bytes, context_bytes, context, n):
+    result = post_single("compute_sum", enc_bytes, context_bytes, context, n)
+    print(f" == Sum = {result:.4f} \n")
+
+
+def calculate_root_mean_square(enc_bytes, context_bytes, context, n):
+    result = post_single("compute_sum_of_squares", enc_bytes, context_bytes, context, n)
+    rms = (result / n) ** 0.5
+    print(f" == Root Mean Square = {rms:.4f} \n")
+
+
+def calculate_variance(enc_bytes, context_bytes, context, n):
+    enc_sum = post_single("compute_sum", enc_bytes, context_bytes, context, n)
+    enc_sum_of_squares = post_single("compute_sum_of_squares", enc_bytes, context_bytes, context, n)
+    variance = (enc_sum_of_squares / n) - (enc_sum / n) ** 2
+    print(f" == Variance = {variance:.4f} \n")
+
+
 # dostępne metryki do wyboru
 AVAILABLE_METRICS = {
-    "1": ("Mean", calculate_mean)
+    "1": ("Mean", calculate_mean),
+    "2": ("Sum", calculate_sum),
+    "3": ("Root Mean Square", calculate_root_mean_square),
+    "4": ("Variance", calculate_variance)
 }
 
 
